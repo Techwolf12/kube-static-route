@@ -1,0 +1,84 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kube-static-route
+  namespace: default
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kube-static-route
+rules:
+- apiGroups: [""]
+  resources:
+    - "nodes"
+    - "nodes/metrics"
+    - "nodes/stats"
+    - "nodes/proxy"
+    - "pods"
+    - "secrets"
+    - "services"
+  verbs: ["get", "list"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kube-static-route
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kube-static-route
+subjects:
+- kind: ServiceAccount
+  name: kube-static-route
+  namespace: default
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kube-static-route
+  namespace: default
+  labels:
+    app: kube-static-route
+spec:
+  selector:
+    matchLabels:
+      name: kube-static-route
+  updateStrategy:
+      type: RollingUpdate # Only supported in Kubernetes version 1.6 or later.
+  template:
+    metadata:
+      labels:
+        name: kube-static-route
+      annotations:
+        # Needed for Kubernetes versions prior to 1.6.0, where tolerations were set via annotations.
+        scheduler.alpha.kubernetes.io/tolerations: |
+          [{"operator": "Exists", "effect": "NoSchedule"},{"operator": "Exists", "effect": "NoExecute"}]
+    spec:
+      serviceAccountName: kube-static-route
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: kube-static-route
+          image: techwolf12/kubernetes-static-route:latest
+          securityContext:
+            privileged: true
+          resources:
+            limits:
+              memory: 150Mi
+            requests:
+              cpu: 100m
+              memory: 150Mi
+          env:
+            - name: "INETROUTE"
+              value: "<ENTER YOUR INET ROUTE>"
+      tolerations:
+        - operator: "Exists"
+          effect: "NoSchedule"
+        - operator: "Exists"
+          effect: "NoExecute"
+
